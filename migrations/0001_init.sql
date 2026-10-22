@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS companies(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,phone TEXT,city TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,plan TEXT DEFAULT 'free',plan_expires TEXT);
+CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,company_id TEXT, name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,role TEXT NOT NULL CHECK(role IN ('superadmin','admin','agent')),active INTEGER NOT NULL DEFAULT 1,password_version INTEGER NOT NULL DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(company_id) REFERENCES companies(id));
+CREATE TABLE IF NOT EXISTS user_credentials(user_id TEXT PRIMARY KEY,salt TEXT NOT NULL,password_hash TEXT NOT NULL,iterations INTEGER NOT NULL DEFAULT 210000,FOREIGN KEY(user_id) REFERENCES users(id));
+CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires_at INTEGER NOT NULL,password_version INTEGER NOT NULL,csrf TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id));
+CREATE TABLE IF NOT EXISTS points_of_sale(id TEXT PRIMARY KEY,company_id TEXT NOT NULL,name TEXT NOT NULL,city TEXT,active INTEGER DEFAULT 1,FOREIGN KEY(company_id) REFERENCES companies(id));
+CREATE TABLE IF NOT EXISTS pos_user_assignments(pos_id TEXT NOT NULL,user_id TEXT NOT NULL,PRIMARY KEY(pos_id,user_id));
+CREATE TABLE IF NOT EXISTS services(id TEXT PRIMARY KEY,company_id TEXT NOT NULL,name TEXT NOT NULL,UNIQUE(company_id,name));
+CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY,company_id TEXT NOT NULL,pos_id TEXT NOT NULL,service_id TEXT,kind TEXT NOT NULL CHECK(kind IN ('cash','wallet')),balance INTEGER NOT NULL DEFAULT 0,UNIQUE(pos_id,service_id,kind));
+CREATE UNIQUE INDEX IF NOT EXISTS ux_cash_per_pos ON accounts(pos_id) WHERE kind='cash';
+CREATE TABLE IF NOT EXISTS transactions(id TEXT PRIMARY KEY,company_id TEXT NOT NULL,pos_id TEXT NOT NULL,actor_id TEXT NOT NULL,type TEXT NOT NULL,service_id TEXT,amount INTEGER NOT NULL CHECK(amount>0),note TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY,transaction_id TEXT NOT NULL,account_id TEXT NOT NULL,delta INTEGER NOT NULL,FOREIGN KEY(transaction_id) REFERENCES transactions(id));
+CREATE TABLE IF NOT EXISTS audit_logs(id TEXT PRIMARY KEY,company_id TEXT,user_id TEXT,action TEXT NOT NULL,detail TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS ix_transactions_company_time ON transactions(company_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_accounts_company_pos ON accounts(company_id,pos_id);
+CREATE TRIGGER IF NOT EXISTS prevent_negative_balance BEFORE UPDATE OF balance ON accounts WHEN NEW.balance < 0 BEGIN SELECT RAISE(ABORT,'Fonds insuffisants'); END;
